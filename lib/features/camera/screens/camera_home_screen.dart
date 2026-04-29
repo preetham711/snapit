@@ -4,10 +4,19 @@ import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../core/theme/app_theme.dart';
 import '../bloc/camera_bloc.dart';
+import '../services/camera_service.dart';
 import '../widgets/camera_preview_widget.dart';
 import '../widgets/top_bar_widget.dart';
 import 'add_details_screen.dart';
 import '../../gallery/screens/gallery_screen.dart';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Capture architecture:
+//   CameraService.captureImage() called DIRECTLY from UI — no BLoC hop.
+//   _isCapturing guard lives in CameraService (single source of truth).
+//   BLoC only handles: init, flash, zoom, switch, pause.
+//   Captured images stored in local _capturedImages (persists across rebuilds).
+// ─────────────────────────────────────────────────────────────────────────────
 
 class CameraHomeScreen extends StatefulWidget {
   const CameraHomeScreen({Key? key}) : super(key: key);
@@ -18,6 +27,7 @@ class CameraHomeScreen extends StatefulWidget {
 class _CameraHomeScreenState extends State<CameraHomeScreen>
     with TickerProviderStateMixin, WidgetsBindingObserver {
   late CameraBloc _cameraBloc;
+  final CameraService _cameraService = CameraService(); // direct access for capture
   final List<String> _capturedImages = [];
 
   late AnimationController _flashCtrl;
@@ -68,10 +78,31 @@ class _CameraHomeScreenState extends State<CameraHomeScreen>
     super.dispose();
   }
 
-  void _onCapture() {
+  // ── CAPTURE — direct call to CameraService, bypasses BLoC ───────────────
+  // This eliminates the async event-queue latency and makes capture instant.
+  // The _isCapturing guard inside CameraService prevents double-taps.
+
+  Future<void> _onCapture() async {
+    // Immediate haptic + visual feedback BEFORE the async capture
     HapticFeedback.mediumImpact();
     _captureCtrl.forward().then((_) => _captureCtrl.reverse());
-    _cameraBloc.add(const CapturePhotoEvent());
+
+    // Direct call — no BLoC event, no queue, no state machine overhead
+    final path = await _cameraService.captureImage();
+
+    if (path == null) {
+      // Already capturing, not initialized, or error — silent fail
+      debugPrint('[Camera] capture skipped or failed');
+      return;
+    }
+
+    // Flash animation after successful capture
+    _triggerFlash();
+
+    // Update local list → triggers setState → circles strip updates
+    if (mounted) {
+      setState(() => _capturedImages.add(path));
+    }
   }
 
   void _triggerFlash() {
@@ -127,13 +158,8 @@ class _CameraHomeScreenState extends State<CameraHomeScreen>
       value: _cameraBloc,
       child: Scaffold(
         backgroundColor: Colors.black,
-        body: BlocConsumer<CameraBloc, CameraState>(
-          listener: (context, state) {
-            if (state is PhotoCaptured) {
-              _triggerFlash();
-              setState(() => _capturedImages.add(state.imagePath));
-            }
-          },
+        // BLoC handles init/flash/zoom/switch only — capture is direct
+        body: BlocBuilder<CameraBloc, CameraState>(
           buildWhen: (prev, curr) =>
               curr is CameraInitial || curr is CameraLoading || curr is CameraReady || curr is CameraError,
           builder: (context, state) {
@@ -674,12 +700,13 @@ class _GallerySquareState extends State<_GallerySquare> with SingleTickerProvide
 
 
 // _DirectCaptureButton — standalone widget with its own GestureDetector.
-// NOT wrapped in any parent GestureDetector, so taps always register.
+// Uses HitTestBehavior.opaque so taps always register regardless of parent.
+// onCapture is async — the button fires and forgets (no await in onTapUp).
 class _DirectCaptureButton extends StatelessWidget {
   final Animation<double> pulseScale;
   final Animation<double> pulseOpacity;
   final Animation<double> captureScale;
-  final VoidCallback onCapture;
+  final Future<void> Function() onCapture; // async callback
   final AnimationController captureCtrl;
 
   const _DirectCaptureButton({
