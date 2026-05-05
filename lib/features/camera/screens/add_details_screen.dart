@@ -1,5 +1,6 @@
 ﻿import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:intl/intl.dart';
 import 'package:uuid/uuid.dart';
 import '../../../core/theme/app_theme.dart';
@@ -38,17 +39,17 @@ class _AddDetailsScreenState extends State<AddDetailsScreen> with TickerProvider
   void initState() {
     super.initState();
     _now = DateTime.now();
-    _c1 = AnimationController(vsync: this, duration: const Duration(milliseconds: 380));
-    _c2 = AnimationController(vsync: this, duration: const Duration(milliseconds: 380));
-    _moreCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 280));
+    _c1 = AnimationController(vsync: this, duration: const Duration(milliseconds: 350));
+    _c2 = AnimationController(vsync: this, duration: const Duration(milliseconds: 350));
+    _moreCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 250));
     _f1 = CurvedAnimation(parent: _c1, curve: Curves.easeOut);
     _f2 = CurvedAnimation(parent: _c2, curve: Curves.easeOut);
-    _s1 = Tween<Offset>(begin: const Offset(0, 0.1), end: Offset.zero)
+    _s1 = Tween<Offset>(begin: const Offset(0, 0.08), end: Offset.zero)
         .animate(CurvedAnimation(parent: _c1, curve: Curves.easeOut));
-    _s2 = Tween<Offset>(begin: const Offset(0, 0.1), end: Offset.zero)
+    _s2 = Tween<Offset>(begin: const Offset(0, 0.08), end: Offset.zero)
         .animate(CurvedAnimation(parent: _c2, curve: Curves.easeOut));
-    Future.delayed(const Duration(milliseconds: 80), () { if (mounted) _c1.forward(); });
-    Future.delayed(const Duration(milliseconds: 200), () { if (mounted) _c2.forward(); });
+    Future.delayed(const Duration(milliseconds: 60), () { if (mounted) _c1.forward(); });
+    Future.delayed(const Duration(milliseconds: 160), () { if (mounted) _c2.forward(); });
     _fetchLocation();
   }
 
@@ -100,8 +101,16 @@ class _AddDetailsScreenState extends State<AddDetailsScreen> with TickerProvider
       }
     } catch (e) {
       setState(() => _isSaving = false);
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to save: $e'), behavior: SnackBarBehavior.floating));
+      if (mounted) {
+        showCupertinoDialog(
+          context: context,
+          builder: (_) => CupertinoAlertDialog(
+            title: const Text('Error'),
+            content: Text('Failed to save: $e'),
+            actions: [CupertinoDialogAction(child: const Text('OK'), onPressed: () => Navigator.pop(context))],
+          ),
+        );
+      }
     }
   }
 
@@ -114,34 +123,36 @@ class _AddDetailsScreenState extends State<AddDetailsScreen> with TickerProvider
           key: _formKey,
           child: Column(
             children: [
-              _topBar(context),
+              _buildNavBar(context),
               Expanded(
                 child: SingleChildScrollView(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 40),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       _imagePreview(),
-                      const SizedBox(height: 20),
-                      FadeTransition(opacity: _f1, child: SlideTransition(position: _s1, child: _card1())),
-                      const SizedBox(height: 14),
-                      FadeTransition(opacity: _f2, child: SlideTransition(position: _s2, child: _card2())),
-                      const SizedBox(height: 14),
-                      _moreBtn(),
+                      const SizedBox(height: 24),
+                      FadeTransition(opacity: _f1, child: SlideTransition(position: _s1, child: _personSection())),
+                      const SizedBox(height: 16),
+                      FadeTransition(opacity: _f2, child: SlideTransition(position: _s2, child: _whenWhereSection())),
+                      const SizedBox(height: 16),
+                      _moreDetailsToggle(),
                       if (_showMore) ...[
-                        const SizedBox(height: 14),
+                        const SizedBox(height: 16),
                         SizeTransition(
                           sizeFactor: CurvedAnimation(parent: _moreCtrl, curve: Curves.easeOut),
-                          child: _card3()),
+                          child: _contactSection()),
                       ],
-                      const SizedBox(height: 24),
-                      _saveBtn(),
+                      const SizedBox(height: 28),
+                      _saveButton(),
                       const SizedBox(height: 12),
-                      Center(child: GestureDetector(
-                        onTap: () => Navigator.of(context).pop(),
-                        child: const Text('Cancel',
-                            style: TextStyle(fontSize: 14, color: AppTheme.textMuted,
-                                decoration: TextDecoration.underline)))),
+                      Center(
+                        child: CupertinoButton(
+                          onPressed: () => Navigator.of(context).pop(),
+                          child: const Text('Cancel',
+                              style: TextStyle(fontSize: 16, color: AppTheme.textMuted)),
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -153,248 +164,292 @@ class _AddDetailsScreenState extends State<AddDetailsScreen> with TickerProvider
     );
   }
 
-  Widget _topBar(BuildContext context) {
+  Widget _buildNavBar(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(4, 8, 16, 4),
+      padding: const EdgeInsets.fromLTRB(8, 8, 16, 4),
       child: Row(
         children: [
-          IconButton(
+          CupertinoButton(
+            padding: EdgeInsets.zero,
             onPressed: () => Navigator.of(context).pop(),
-            icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
-            color: AppTheme.textPrimary,
+            child: const Icon(CupertinoIcons.back, color: AppTheme.primary, size: 28),
           ),
           const Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('Add Details', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: AppTheme.textPrimary)),
-              Text('Fill details or go back for more photos', style: TextStyle(fontSize: 11, color: AppTheme.textMuted)),
+              Text('Add Details',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700,
+                      color: AppTheme.textPrimary, letterSpacing: -0.3)),
+              Text('Fill in details for this memory',
+                  style: TextStyle(fontSize: 12, color: AppTheme.textMuted)),
             ]),
           ),
-          _SavePill(onTap: _isSaving ? null : _save, isSaving: _isSaving),
+          _isSaving
+              ? const CupertinoActivityIndicator()
+              : CupertinoButton(
+                  padding: EdgeInsets.zero,
+                  onPressed: _save,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: AppTheme.primary,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: const Text('Save',
+                        style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.white)),
+                  ),
+                ),
         ],
       ),
     );
   }
 
   Widget _imagePreview() {
-    return Container(
-      height: 260,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.12), blurRadius: 20, offset: const Offset(0, 8))],
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(20),
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(16),
+      child: SizedBox(
+        height: 240,
+        width: double.infinity,
         child: Image.file(File(widget.imagePath), fit: BoxFit.cover,
-            errorBuilder: (_, __, ___) => Container(color: AppTheme.bg1,
-                child: const Center(child: Icon(Icons.broken_image_outlined, size: 48, color: AppTheme.textMuted)))),
+            errorBuilder: (_, __, ___) => Container(
+                color: AppTheme.bg3,
+                child: const Center(child: Icon(CupertinoIcons.photo, size: 48, color: AppTheme.textMuted)))),
       ),
     );
   }
 
-  Widget _card1() {
-    return _Card(
-      icon: Icons.person_outline_rounded, title: 'Person Details', color: AppTheme.primary,
+  // iOS inset grouped section
+  Widget _personSection() {
+    return _IosSection(
+      header: 'PERSON',
       children: [
-        TextFormField(
-          controller: _nameCtrl, autofocus: true,
+        _IosTextField(
+          controller: _nameCtrl,
+          placeholder: 'Full Name',
+          icon: CupertinoIcons.person,
+          autofocus: true,
           textCapitalization: TextCapitalization.words,
-          style: const TextStyle(fontSize: 15, color: AppTheme.textPrimary),
-          decoration: const InputDecoration(hintText: 'Full name *',
-              prefixIcon: Icon(Icons.badge_outlined, size: 18, color: AppTheme.textMuted)),
           validator: (v) => (v == null || v.trim().isEmpty) ? 'Name is required' : null,
         ),
-        const SizedBox(height: 12),
-        TextFormField(
-          controller: _notesCtrl, maxLines: 3,
+        const _IosDivider(),
+        _IosTextField(
+          controller: _notesCtrl,
+          placeholder: 'Notes',
+          icon: CupertinoIcons.doc_text,
+          maxLines: 3,
           textCapitalization: TextCapitalization.sentences,
-          style: const TextStyle(fontSize: 15, color: AppTheme.textPrimary),
-          decoration: const InputDecoration(hintText: 'Notes (optional)',
-              prefixIcon: Padding(padding: EdgeInsets.only(bottom: 40),
-                  child: Icon(Icons.notes_rounded, size: 18, color: AppTheme.textMuted)),
-              alignLabelWithHint: true),
         ),
       ],
     );
   }
 
-  Widget _card2() {
+  Widget _whenWhereSection() {
     final dateStr = DateFormat('EEE, MMM d, y').format(_now);
     final timeStr = DateFormat('h:mm a').format(_now);
-    return _Card(
-      icon: Icons.schedule_rounded, title: 'When & Where', color: const Color(0xFF10B981),
+    return _IosSection(
+      header: 'WHEN & WHERE',
       children: [
-        _ReadRow(icon: Icons.calendar_today_outlined, iconColor: AppTheme.primary,
-            label: '$dateStr  -  $timeStr'),
-        const SizedBox(height: 10),
-        _ReadRow(icon: Icons.location_on_outlined, iconColor: const Color(0xFF10B981),
-            label: _locationText, isLoading: _locationText == 'Fetching...'),
+        _IosReadRow(
+          icon: CupertinoIcons.calendar,
+          label: '$dateStr  ·  $timeStr',
+          iconColor: AppTheme.primary,
+        ),
+        const _IosDivider(),
+        _IosReadRow(
+          icon: CupertinoIcons.location_fill,
+          label: _locationText,
+          iconColor: AppTheme.success,
+          isLoading: _locationText == 'Fetching...',
+        ),
       ],
     );
   }
 
-  Widget _card3() {
-    return _Card(
-      icon: Icons.contact_page_outlined, title: 'Contact Info', color: const Color(0xFF8B5CF6),
+  Widget _contactSection() {
+    return _IosSection(
+      header: 'CONTACT INFO',
       children: [
-        TextFormField(controller: _emailCtrl, keyboardType: TextInputType.emailAddress,
-            style: const TextStyle(fontSize: 15, color: AppTheme.textPrimary),
-            decoration: const InputDecoration(hintText: 'Email address',
-                prefixIcon: Icon(Icons.email_outlined, size: 18, color: AppTheme.textMuted))),
-        const SizedBox(height: 12),
-        TextFormField(controller: _instaCtrl,
-            style: const TextStyle(fontSize: 15, color: AppTheme.textPrimary),
-            decoration: const InputDecoration(hintText: 'Instagram handle',
-                prefixIcon: Icon(Icons.alternate_email_rounded, size: 18, color: AppTheme.textMuted))),
-        const SizedBox(height: 12),
-        TextFormField(controller: _phoneCtrl, keyboardType: TextInputType.phone,
-            style: const TextStyle(fontSize: 15, color: AppTheme.textPrimary),
-            decoration: const InputDecoration(hintText: 'Phone number',
-                prefixIcon: Icon(Icons.phone_outlined, size: 18, color: AppTheme.textMuted))),
+        _IosTextField(
+          controller: _emailCtrl,
+          placeholder: 'Email',
+          icon: CupertinoIcons.mail,
+          keyboardType: TextInputType.emailAddress,
+        ),
+        const _IosDivider(),
+        _IosTextField(
+          controller: _instaCtrl,
+          placeholder: 'Instagram',
+          icon: CupertinoIcons.at,
+        ),
+        const _IosDivider(),
+        _IosTextField(
+          controller: _phoneCtrl,
+          placeholder: 'Phone',
+          icon: CupertinoIcons.phone,
+          keyboardType: TextInputType.phone,
+        ),
       ],
     );
   }
 
-  Widget _moreBtn() {
+  Widget _moreDetailsToggle() {
     return GestureDetector(
       onTap: () {
         setState(() => _showMore = !_showMore);
         _showMore ? _moreCtrl.forward() : _moreCtrl.reverse();
       },
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 14),
+        padding: const EdgeInsets.symmetric(vertical: 13),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppTheme.primary.withOpacity(0.4)),
+          color: AppTheme.bg2,
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: AppTheme.subtleShadow,
         ),
         child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-          Icon(_showMore ? Icons.remove_circle_outline_rounded : Icons.add_circle_outline_rounded,
+          Icon(_showMore ? CupertinoIcons.minus_circle : CupertinoIcons.plus_circle,
               size: 18, color: AppTheme.primary),
           const SizedBox(width: 8),
-          Text(_showMore ? 'Hide extra details' : '+ Add more details',
-              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppTheme.primary)),
+          Text(_showMore ? 'Hide Contact Info' : 'Add Contact Info',
+              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500, color: AppTheme.primary)),
         ]),
       ),
     );
   }
 
-  Widget _saveBtn() {
-    return GestureDetector(
-      onTap: _isSaving ? null : _save,
-      child: Container(
-        height: 52,
-        decoration: BoxDecoration(
-          gradient: _isSaving ? null : AppTheme.primaryGradient,
-          color: _isSaving ? AppTheme.bg3 : null,
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: _isSaving ? null : AppTheme.primaryGlow,
-        ),
-        child: Center(child: _isSaving
-            ? const SizedBox(width: 22, height: 22,
-                child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white))
-            : const Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                Icon(Icons.save_rounded, color: Colors.white, size: 18),
-                SizedBox(width: 8),
-                Text('Save Memory', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Colors.white)),
-              ])),
-      ),
+  Widget _saveButton() {
+    return CupertinoButton.filled(
+      onPressed: _isSaving ? null : _save,
+      borderRadius: BorderRadius.circular(14),
+      padding: const EdgeInsets.symmetric(vertical: 16),
+      child: _isSaving
+          ? const CupertinoActivityIndicator(color: Colors.white)
+          : const Text('Save Memory',
+              style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
     );
   }
 }
 
-class _Card extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final Color color;
+// ─── iOS-style section ────────────────────────────────────────────────────────
+
+class _IosSection extends StatelessWidget {
+  final String header;
   final List<Widget> children;
-  const _Card({required this.icon, required this.title, required this.color, required this.children});
+  const _IosSection({required this.header, required this.children});
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: AppTheme.glassCard(radius: 20),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [
-          Container(width: 28, height: 28,
-              decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
-              child: Icon(icon, size: 15, color: color)),
-          const SizedBox(width: 8),
-          Text(title, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: AppTheme.textPrimary)),
-        ]),
-        const SizedBox(height: 14),
-        ...children,
-      ]),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(left: 4, bottom: 6),
+          child: Text(header,
+              style: const TextStyle(
+                  fontSize: 12, fontWeight: FontWeight.w500,
+                  color: AppTheme.textMuted, letterSpacing: 0.5)),
+        ),
+        Container(
+          decoration: AppTheme.iosCard(radius: 12),
+          child: Column(children: children),
+        ),
+      ],
     );
   }
 }
 
-class _ReadRow extends StatelessWidget {
+class _IosTextField extends StatelessWidget {
+  final TextEditingController controller;
+  final String placeholder;
+  final IconData icon;
+  final bool autofocus;
+  final int maxLines;
+  final TextInputType? keyboardType;
+  final TextCapitalization textCapitalization;
+  final String? Function(String?)? validator;
+
+  const _IosTextField({
+    required this.controller,
+    required this.placeholder,
+    required this.icon,
+    this.autofocus = false,
+    this.maxLines = 1,
+    this.keyboardType,
+    this.textCapitalization = TextCapitalization.none,
+    this.validator,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+      child: Row(
+        crossAxisAlignment: maxLines > 1 ? CrossAxisAlignment.start : CrossAxisAlignment.center,
+        children: [
+          Padding(
+            padding: EdgeInsets.only(top: maxLines > 1 ? 12 : 0),
+            child: Icon(icon, size: 18, color: AppTheme.textMuted),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: TextFormField(
+              controller: controller,
+              autofocus: autofocus,
+              maxLines: maxLines,
+              keyboardType: keyboardType,
+              textCapitalization: textCapitalization,
+              validator: validator,
+              style: const TextStyle(fontSize: 16, color: AppTheme.textPrimary),
+              decoration: InputDecoration(
+                hintText: placeholder,
+                hintStyle: const TextStyle(fontSize: 16, color: AppTheme.textMuted),
+                border: InputBorder.none,
+                enabledBorder: InputBorder.none,
+                focusedBorder: InputBorder.none,
+                contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                isDense: true,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _IosReadRow extends StatelessWidget {
   final IconData icon;
   final Color iconColor;
   final String label;
   final bool isLoading;
-  const _ReadRow({required this.icon, required this.iconColor, required this.label, this.isLoading = false});
+  const _IosReadRow({required this.icon, required this.iconColor, required this.label, this.isLoading = false});
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(color: AppTheme.bg1, borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: AppTheme.border)),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
       child: Row(children: [
         Icon(icon, size: 18, color: iconColor),
-        const SizedBox(width: 10),
+        const SizedBox(width: 12),
         if (isLoading) ...[
-          SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 2, color: iconColor)),
+          const CupertinoActivityIndicator(radius: 8),
           const SizedBox(width: 8),
-          const Text('Fetching...', style: TextStyle(fontSize: 14, color: AppTheme.textMuted)),
+          const Text('Fetching...', style: TextStyle(fontSize: 16, color: AppTheme.textMuted)),
         ] else
           Expanded(child: Text(label,
-              style: const TextStyle(fontSize: 14, color: AppTheme.textSecondary),
+              style: const TextStyle(fontSize: 16, color: AppTheme.textSecondary),
               maxLines: 1, overflow: TextOverflow.ellipsis)),
       ]),
     );
   }
 }
 
-class _SavePill extends StatefulWidget {
-  final VoidCallback? onTap;
-  final bool isSaving;
-  const _SavePill({this.onTap, required this.isSaving});
-
-  @override
-  State<_SavePill> createState() => _SavePillState();
-}
-
-class _SavePillState extends State<_SavePill> with SingleTickerProviderStateMixin {
-  late AnimationController _ctrl;
-  late Animation<double> _scale;
-
-  @override
-  void initState() {
-    super.initState();
-    _ctrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 100));
-    _scale = Tween<double>(begin: 1.0, end: 0.92).animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeOut));
-  }
-
-  @override
-  void dispose() { _ctrl.dispose(); super.dispose(); }
+class _IosDivider extends StatelessWidget {
+  const _IosDivider();
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTapDown: widget.onTap != null ? (_) => _ctrl.forward() : null,
-      onTapUp: widget.onTap != null ? (_) { _ctrl.reverse(); widget.onTap!(); } : null,
-      onTapCancel: () => _ctrl.reverse(),
-      child: ScaleTransition(
-        scale: _scale,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          decoration: BoxDecoration(gradient: AppTheme.primaryGradient,
-              borderRadius: BorderRadius.circular(20), boxShadow: AppTheme.primaryGlow),
-          child: const Text('Save', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Colors.white)),
-        ),
-      ),
+    return const Padding(
+      padding: EdgeInsets.only(left: 44),
+      child: Divider(height: 0.5, thickness: 0.5, color: AppTheme.separator),
     );
   }
 }

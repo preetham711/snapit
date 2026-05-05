@@ -1,5 +1,6 @@
 ﻿import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:intl/intl.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/services/storage_service.dart';
@@ -7,20 +8,11 @@ import '../../../core/services/cloud_sync_service.dart';
 import '../../../core/models/memory_model.dart';
 import '../models/person_model.dart';
 import '../models/meeting_model.dart';
-import '../widgets/header_widget.dart';
-import '../widgets/search_bar_widget.dart';
-import '../widgets/tab_switcher_widget.dart';
 import '../widgets/person_card_widget.dart';
 import 'person_detail_screen.dart';
 import 'settings_screen.dart';
 import '../../camera/screens/camera_home_screen.dart';
 import '../../camera/screens/add_details_screen.dart';
-
-// Google Photos-style gallery:
-//   Tab 1 "Photos"  — all photos in date-grouped grid (from Firestore + local)
-//   Tab 2 "People"  — person cards
-//   Tab 3 "Memories"— smart reminders
-// FAB → camera
 
 class GalleryScreen extends StatefulWidget {
   const GalleryScreen({Key? key}) : super(key: key);
@@ -35,6 +27,7 @@ class _GalleryScreenState extends State<GalleryScreen>
   List<PersonModel> _people = [];
   List<Memory> _allMemories = [];
   bool _loading = true;
+  final _searchCtrl = TextEditingController();
 
   @override
   void initState() {
@@ -47,6 +40,7 @@ class _GalleryScreenState extends State<GalleryScreen>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _searchCtrl.dispose();
     super.dispose();
   }
 
@@ -54,8 +48,6 @@ class _GalleryScreenState extends State<GalleryScreen>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) _loadData();
   }
-
-  // ── Data ──────────────────────────────────────────────────────────────────
 
   void _subscribeToCloud() {
     CloudSyncService.instance.memoriesStream().listen(
@@ -75,7 +67,6 @@ class _GalleryScreenState extends State<GalleryScreen>
       final allMemoriesRaw = await StorageService.getAllMemoriesWithPeopleIds();
       final localMemories  = await StorageService.getAllMemories();
 
-      // Build person → memories map
       final memoryMap = <String, List<MemoryWithPeopleIds>>{};
       for (final mw in allMemoriesRaw) {
         for (final pid in mw.peopleIds) {
@@ -145,10 +136,10 @@ class _GalleryScreenState extends State<GalleryScreen>
 
   String _strengthColor(String s) {
     switch (s) {
-      case 'Close':   return '10B981';
+      case 'Close':   return '34C759';
       case 'Regular': return '4F46E5';
-      case 'Recent':  return 'F59E0B';
-      default:        return '8B5CF6';
+      case 'Recent':  return 'FF9500';
+      default:        return '8E8E93';
     }
   }
 
@@ -162,23 +153,15 @@ class _GalleryScreenState extends State<GalleryScreen>
     return 999;
   }
 
-  // ── Navigation ─────────────────────────────────────────────────────────────
-
   void _openSettings() {
     Navigator.of(context)
-        .push(MaterialPageRoute(builder: (_) => const SettingsScreen()))
+        .push(CupertinoPageRoute(builder: (_) => const SettingsScreen()))
         .then((_) => _loadData());
   }
 
   void _openPersonDetail(PersonModel person) {
-    Navigator.of(context).push(PageRouteBuilder(
-      pageBuilder: (_, anim, __) => PersonDetailScreen(person: person),
-      transitionsBuilder: (_, anim, __, child) => SlideTransition(
-        position: Tween<Offset>(begin: const Offset(1.0, 0), end: Offset.zero)
-            .animate(CurvedAnimation(parent: anim, curve: Curves.easeOutCubic)),
-        child: child,
-      ),
-      transitionDuration: const Duration(milliseconds: 320),
+    Navigator.of(context).push(CupertinoPageRoute(
+      builder: (_) => PersonDetailScreen(person: person),
     ));
   }
 
@@ -190,77 +173,133 @@ class _GalleryScreenState extends State<GalleryScreen>
   }
 
   void _openPhotoViewer(Memory memory) {
-    Navigator.of(context).push(MaterialPageRoute(
+    Navigator.of(context).push(CupertinoPageRoute(
       builder: (_) => _PhotoViewerScreen(memory: memory, onAddDetails: () {
         Navigator.of(context).pop();
-        Navigator.of(context).push(MaterialPageRoute(
+        Navigator.of(context).push(CupertinoPageRoute(
           builder: (_) => AddDetailsScreen(imagePath: memory.imagePath)));
       }),
     ));
   }
 
-  // ── Build ──────────────────────────────────────────────────────────────────
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppTheme.bg0,
-      body: SafeArea(
-        child: Column(
+      body: Column(
+        children: [
+          // iOS Large Title Navigation Bar
+          _buildNavBar(),
+          // iOS Segmented Control
+          _buildSegmentedControl(),
+          // Content
+          Expanded(child: _buildContent()),
+        ],
+      ),
+      // iOS-style camera FAB
+      floatingActionButton: _buildCameraFAB(),
+    );
+  }
+
+  Widget _buildNavBar() {
+    return SafeArea(
+      bottom: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 8, 16, 0),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
           children: [
-            // Header with logo + title + settings
-            HeaderWidget(onSettingsTap: _openSettings),
-
-            // Search bar on Photos + People tabs
-            if (_selectedTab != 2)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-                child: SearchBarWidget(
-                  onChanged: (q) => setState(() => _searchQuery = q),
-                ),
-              ),
-
-            // Tab switcher
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-              child: TabSwitcherWidget(
-                tabs: const ['Photos', 'People', 'Memories'],
-                selectedIndex: _selectedTab,
-                onTabSelected: (i) => setState(() {
-                  _selectedTab = i;
-                  _searchQuery = '';
-                }),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Large title — iOS style
+                  Text(
+                    _tabTitle,
+                    style: const TextStyle(
+                      fontSize: 34,
+                      fontWeight: FontWeight.w700,
+                      color: AppTheme.textPrimary,
+                      letterSpacing: -0.5,
+                      height: 1.1,
+                    ),
+                  ),
+                ],
               ),
             ),
-
-            Expanded(child: _buildTabContent()),
+            // Settings button — iOS style
+            CupertinoButton(
+              padding: EdgeInsets.zero,
+              onPressed: _openSettings,
+              child: Container(
+                width: 34, height: 34,
+                decoration: BoxDecoration(
+                  color: AppTheme.bg2,
+                  shape: BoxShape.circle,
+                  boxShadow: AppTheme.subtleShadow,
+                ),
+                child: const Icon(CupertinoIcons.ellipsis_circle,
+                    color: AppTheme.primary, size: 20),
+              ),
+            ),
           ],
         ),
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _goToCamera,
-        backgroundColor: AppTheme.primary,
-        child: const Icon(Icons.camera_alt_rounded, color: Colors.white),
       ),
     );
   }
 
-  Widget _buildTabContent() {
-    if (_loading) {
-      return const Center(child: CircularProgressIndicator(color: AppTheme.primary));
-    }
+  String get _tabTitle {
     switch (_selectedTab) {
-      case 0: return _buildPhotosGrid();
-      case 1: return _buildPeopleGrid();
-      case 2: return _buildMemoriesTab();
-      default: return _buildPhotosGrid();
+      case 0: return 'Photos';
+      case 1: return 'People';
+      case 2: return 'Memories';
+      default: return 'Gallery';
     }
   }
 
-  // ── Tab 0: Photos — Google Photos style date-grouped grid ─────────────────
+  Widget _buildSegmentedControl() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+      child: CupertinoSlidingSegmentedControl<int>(
+        groupValue: _selectedTab,
+        backgroundColor: AppTheme.bg3,
+        thumbColor: AppTheme.bg2,
+        children: const {
+          0: Padding(
+            padding: EdgeInsets.symmetric(horizontal: 4),
+            child: Text('Photos', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+          ),
+          1: Padding(
+            padding: EdgeInsets.symmetric(horizontal: 4),
+            child: Text('People', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+          ),
+          2: Padding(
+            padding: EdgeInsets.symmetric(horizontal: 4),
+            child: Text('Memories', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+          ),
+        },
+        onValueChanged: (v) {
+          if (v != null) setState(() { _selectedTab = v; _searchQuery = ''; _searchCtrl.clear(); });
+        },
+      ),
+    );
+  }
 
-  Widget _buildPhotosGrid() {
-    // Filter by search
+  Widget _buildContent() {
+    if (_loading) {
+      return const Center(child: CupertinoActivityIndicator());
+    }
+    switch (_selectedTab) {
+      case 0: return _buildPhotosTab();
+      case 1: return _buildPeopleTab();
+      case 2: return _buildMemoriesTab();
+      default: return _buildPhotosTab();
+    }
+  }
+
+  // ── Photos tab ────────────────────────────────────────────────────────────
+
+  Widget _buildPhotosTab() {
     final memories = _searchQuery.isEmpty
         ? _allMemories
         : _allMemories.where((m) {
@@ -270,20 +309,27 @@ class _GalleryScreenState extends State<GalleryScreen>
                 m.people.any((p) => p.name.toLowerCase().contains(q));
           }).toList();
 
-    if (memories.isEmpty) {
-      return _buildEmptyState(
-        icon: Icons.photo_library_outlined,
-        title: _searchQuery.isEmpty ? 'No photos yet' : 'No photos found',
-        subtitle: _searchQuery.isEmpty
-            ? 'Take your first photo to see it here'
-            : 'Try a different search term',
-        action: _searchQuery.isEmpty
-            ? _EmptyAction(label: 'Open Camera', onTap: _goToCamera)
-            : null,
-      );
-    }
+    return Column(
+      children: [
+        _buildSearchBar('Search photos...'),
+        Expanded(
+          child: memories.isEmpty
+              ? _buildEmptyState(
+                  icon: CupertinoIcons.photo_on_rectangle,
+                  title: _searchQuery.isEmpty ? 'No Photos Yet' : 'No Results',
+                  subtitle: _searchQuery.isEmpty
+                      ? 'Take your first photo to see it here'
+                      : 'Try a different search term',
+                  actionLabel: _searchQuery.isEmpty ? 'Open Camera' : null,
+                  onAction: _searchQuery.isEmpty ? _goToCamera : null,
+                )
+              : _buildPhotosGrid(memories),
+        ),
+      ],
+    );
+  }
 
-    // Group by date
+  Widget _buildPhotosGrid(List<Memory> memories) {
     final groups = <String, List<Memory>>{};
     for (final m in memories) {
       final key = _photoGroupLabel(m.dateTime);
@@ -293,19 +339,33 @@ class _GalleryScreenState extends State<GalleryScreen>
     return RefreshIndicator(
       color: AppTheme.primary,
       onRefresh: _loadData,
-      child: ListView.builder(
-        padding: const EdgeInsets.fromLTRB(0, 8, 0, 100),
+      child: CustomScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
-        itemCount: groups.length,
-        itemBuilder: (context, i) {
-          final key   = groups.keys.elementAt(i);
-          final items = groups[key]!;
-          return _PhotoGroup(
-            label: key,
-            memories: items,
-            onTap: _openPhotoViewer,
-          );
-        },
+        slivers: [
+          for (final entry in groups.entries) ...[
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                child: Text(entry.key,
+                    style: const TextStyle(
+                        fontSize: 15, fontWeight: FontWeight.w600,
+                        color: AppTheme.textPrimary, letterSpacing: -0.2)),
+              ),
+            ),
+            SliverGrid(
+              delegate: SliverChildBuilderDelegate(
+                (_, i) => GestureDetector(
+                  onTap: () => _openPhotoViewer(entry.value[i]),
+                  child: _PhotoCell(memory: entry.value[i]),
+                ),
+                childCount: entry.value.length,
+              ),
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 3, crossAxisSpacing: 1.5, mainAxisSpacing: 1.5),
+            ),
+          ],
+          const SliverToBoxAdapter(child: SizedBox(height: 100)),
+        ],
       ),
     );
   }
@@ -317,78 +377,76 @@ class _GalleryScreenState extends State<GalleryScreen>
     final diff  = today.difference(date).inDays;
     if (diff == 0) return 'Today';
     if (diff == 1) return 'Yesterday';
-    if (diff < 7)  return DateFormat('EEEE').format(dt); // Monday, Tuesday...
+    if (diff < 7)  return DateFormat('EEEE').format(dt);
     if (dt.year == now.year) return DateFormat('MMMM d').format(dt);
     return DateFormat('MMMM d, y').format(dt);
   }
 
-  // ── Tab 1: People ──────────────────────────────────────────────────────────
+  // ── People tab ────────────────────────────────────────────────────────────
 
-  Widget _buildPeopleGrid() {
+  Widget _buildPeopleTab() {
     final people = _searchQuery.isEmpty
         ? _people
         : _people.where((p) =>
             p.name.toLowerCase().contains(_searchQuery.toLowerCase()) ||
             p.tag.toLowerCase().contains(_searchQuery.toLowerCase())).toList();
 
-    if (people.isEmpty) {
-      return _buildEmptyState(
-        icon: Icons.people_outline_rounded,
-        title: _searchQuery.isEmpty ? 'No people yet' : 'No people found',
-        subtitle: _searchQuery.isEmpty
-            ? 'Capture a photo and add details to see people here'
-            : 'Try a different search term',
-        action: _searchQuery.isEmpty
-            ? _EmptyAction(label: 'Open Camera', onTap: _goToCamera)
-            : null,
-      );
-    }
-
-    return RefreshIndicator(
-      color: AppTheme.primary,
-      onRefresh: _loadData,
-      child: GridView.builder(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
-        physics: const AlwaysScrollableScrollPhysics(),
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 2, crossAxisSpacing: 12, mainAxisSpacing: 12,
-          childAspectRatio: 0.78,
+    return Column(
+      children: [
+        _buildSearchBar('Search people...'),
+        Expanded(
+          child: people.isEmpty
+              ? _buildEmptyState(
+                  icon: CupertinoIcons.person_2,
+                  title: _searchQuery.isEmpty ? 'No People Yet' : 'No Results',
+                  subtitle: _searchQuery.isEmpty
+                      ? 'Capture a photo and add details to see people here'
+                      : 'Try a different search term',
+                  actionLabel: _searchQuery.isEmpty ? 'Open Camera' : null,
+                  onAction: _searchQuery.isEmpty ? _goToCamera : null,
+                )
+              : RefreshIndicator(
+                  color: AppTheme.primary,
+                  onRefresh: _loadData,
+                  child: GridView.builder(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 2, crossAxisSpacing: 12, mainAxisSpacing: 12,
+                      childAspectRatio: 0.78,
+                    ),
+                    itemCount: people.length,
+                    itemBuilder: (context, index) => PersonCardWidget(
+                      person: people[index],
+                      animationIndex: index,
+                      onTap: () => _openPersonDetail(people[index]),
+                    ),
+                  ),
+                ),
         ),
-        itemCount: people.length,
-        itemBuilder: (context, index) => _AnimatedCard(
-          index: index,
-          child: PersonCardWidget(
-            person: people[index],
-            animationIndex: index,
-            onTap: () => _openPersonDetail(people[index]),
-          ),
-        ),
-      ),
+      ],
     );
   }
 
-  // ── Tab 2: Memories ────────────────────────────────────────────────────────
+  // ── Memories tab ──────────────────────────────────────────────────────────
 
   Widget _buildMemoriesTab() {
     final reminders = _buildReminders();
     if (reminders.isEmpty) {
       return _buildEmptyState(
-        icon: Icons.auto_awesome_rounded,
-        title: 'No reminders yet',
-        subtitle: 'Smart reminders appear once you have memories\nwith people you have not seen in a while',
+        icon: CupertinoIcons.sparkles,
+        title: 'No Reminders Yet',
+        subtitle: 'Smart reminders appear once you have memories with people you have not seen in a while',
       );
     }
     return RefreshIndicator(
       color: AppTheme.primary,
       onRefresh: _loadData,
       child: ListView.builder(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
         physics: const AlwaysScrollableScrollPhysics(),
         itemCount: reminders.length,
-        itemBuilder: (_, i) => _AnimatedCard(
-          index: i,
-          child: _ReminderCard(reminder: reminders[i]),
-        ),
+        itemBuilder: (_, i) => _ReminderCard(reminder: reminders[i]),
       ),
     );
   }
@@ -400,13 +458,13 @@ class _GalleryScreenState extends State<GalleryScreen>
       if (days < 3) continue;
       String msg;
       if (days < 7) {
-        msg = 'You have not seen ${p.name} in $days days. Say hi!';
+        msg = 'You have not seen ${p.name} in $days days.';
       } else if (days < 30) {
         final w = (days / 7).floor();
-        msg = 'It has been $w ${w == 1 ? "week" : "weeks"} since you met ${p.name}.';
+        msg = '$w ${w == 1 ? "week" : "weeks"} since you met ${p.name}.';
       } else {
         final mo = (days / 30).floor();
-        msg = '${p.name} - $mo ${mo == 1 ? "month" : "months"} since you last met!';
+        msg = '$mo ${mo == 1 ? "month" : "months"} since you last met!';
       }
       reminders.add(_Reminder(
         name: p.name, message: msg, avatarPath: p.imagePath,
@@ -422,38 +480,54 @@ class _GalleryScreenState extends State<GalleryScreen>
     catch (_) { return AppTheme.primary; }
   }
 
+  // ── Shared components ─────────────────────────────────────────────────────
+
+  Widget _buildSearchBar(String hint) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
+      child: CupertinoSearchTextField(
+        controller: _searchCtrl,
+        placeholder: hint,
+        onChanged: (q) => setState(() => _searchQuery = q),
+        backgroundColor: AppTheme.bg2,
+        style: const TextStyle(fontSize: 16, color: AppTheme.textPrimary),
+        placeholderStyle: const TextStyle(fontSize: 16, color: AppTheme.textMuted),
+      ),
+    );
+  }
+
   Widget _buildEmptyState({
-    required IconData icon, required String title, required String subtitle,
-    _EmptyAction? action,
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    String? actionLabel,
+    VoidCallback? onAction,
   }) {
     return Center(
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 32),
+        padding: const EdgeInsets.symmetric(horizontal: 40),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Container(width: 80, height: 80,
-                decoration: BoxDecoration(color: AppTheme.primary.withOpacity(0.08), shape: BoxShape.circle),
-                child: Icon(icon, size: 36, color: AppTheme.primary)),
+            Icon(icon, size: 52, color: AppTheme.textMuted),
             const SizedBox(height: 16),
-            Text(title, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: AppTheme.textPrimary)),
+            Text(title,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                    fontSize: 20, fontWeight: FontWeight.w600,
+                    color: AppTheme.textPrimary, letterSpacing: -0.3)),
             const SizedBox(height: 8),
-            Text(subtitle, textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 14, color: AppTheme.textMuted, height: 1.5)),
-            if (action != null) ...[
+            Text(subtitle,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                    fontSize: 15, color: AppTheme.textMuted, height: 1.4)),
+            if (actionLabel != null && onAction != null) ...[
               const SizedBox(height: 24),
-              GestureDetector(
-                onTap: action.onTap,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                  decoration: BoxDecoration(gradient: AppTheme.primaryGradient,
-                      borderRadius: BorderRadius.circular(24), boxShadow: AppTheme.primaryGlow),
-                  child: Row(mainAxisSize: MainAxisSize.min, children: [
-                    const Icon(Icons.camera_alt_rounded, color: Colors.white, size: 18),
-                    const SizedBox(width: 8),
-                    Text(action.label, style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600)),
-                  ]),
-                ),
+              CupertinoButton.filled(
+                onPressed: onAction,
+                borderRadius: BorderRadius.circular(14),
+                child: Text(actionLabel,
+                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
               ),
             ],
           ],
@@ -461,55 +535,31 @@ class _GalleryScreenState extends State<GalleryScreen>
       ),
     );
   }
-}
 
-// ─── Photo group (Google Photos style) ───────────────────────────────────────
-
-class _PhotoGroup extends StatelessWidget {
-  final String label;
-  final List<Memory> memories;
-  final void Function(Memory) onTap;
-
-  const _PhotoGroup({required this.label, required this.memories, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-          child: Text(label,
-              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppTheme.textPrimary)),
+  Widget _buildCameraFAB() {
+    return GestureDetector(
+      onTap: _goToCamera,
+      child: Container(
+        width: 56, height: 56,
+        decoration: BoxDecoration(
+          color: AppTheme.primary,
+          shape: BoxShape.circle,
+          boxShadow: AppTheme.primaryGlow,
         ),
-        GridView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          padding: const EdgeInsets.symmetric(horizontal: 2),
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 3, crossAxisSpacing: 2, mainAxisSpacing: 2),
-          itemCount: memories.length,
-          itemBuilder: (_, i) => _PhotoCell(memory: memories[i], onTap: () => onTap(memories[i])),
-        ),
-      ],
+        child: const Icon(CupertinoIcons.camera_fill, color: Colors.white, size: 24),
+      ),
     );
   }
 }
+
+// ─── Photo cell ───────────────────────────────────────────────────────────────
 
 class _PhotoCell extends StatelessWidget {
   final Memory memory;
-  final VoidCallback onTap;
-  const _PhotoCell({required this.memory, required this.onTap});
+  const _PhotoCell({required this.memory});
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: _buildImage(),
-    );
-  }
-
-  Widget _buildImage() {
     final path = memory.imagePath;
     if (path.startsWith('http')) {
       return Image.network(path, fit: BoxFit.cover,
@@ -523,15 +573,14 @@ class _PhotoCell extends StatelessWidget {
 
   Widget _placeholder() => Container(
       color: AppTheme.bg3,
-      child: const Icon(Icons.image_outlined, color: AppTheme.textMuted, size: 28));
+      child: const Icon(CupertinoIcons.photo, color: AppTheme.textMuted, size: 24));
 }
 
-// ─── Photo viewer screen ──────────────────────────────────────────────────────
+// ─── Photo viewer ─────────────────────────────────────────────────────────────
 
 class _PhotoViewerScreen extends StatelessWidget {
   final Memory memory;
   final VoidCallback onAddDetails;
-
   const _PhotoViewerScreen({required this.memory, required this.onAddDetails});
 
   @override
@@ -544,95 +593,76 @@ class _PhotoViewerScreen extends StatelessWidget {
       body: Stack(
         fit: StackFit.expand,
         children: [
-          // Full-screen image with pinch zoom
           InteractiveViewer(
             child: Center(
               child: path.startsWith('http')
                   ? Image.network(path, fit: BoxFit.contain,
-                      errorBuilder: (_, __, ___) => const Icon(Icons.broken_image, color: Colors.white38, size: 64))
+                      errorBuilder: (_, __, ___) => const Icon(CupertinoIcons.photo, color: Colors.white38, size: 64))
                   : (path.isNotEmpty && File(path).existsSync()
                       ? Image.file(File(path), fit: BoxFit.contain)
-                      : const Icon(Icons.broken_image, color: Colors.white38, size: 64)),
+                      : const Icon(CupertinoIcons.photo, color: Colors.white38, size: 64)),
             ),
           ),
-
           // Top bar
           Positioned(top: 0, left: 0, right: 0,
-            child: SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                child: Row(
-                  children: [
-                    GestureDetector(
-                      onTap: () => Navigator.of(context).pop(),
-                      child: Container(width: 40, height: 40,
-                          decoration: BoxDecoration(shape: BoxShape.circle,
-                              color: Colors.black.withOpacity(0.5)),
-                          child: const Icon(Icons.arrow_back_rounded, color: Colors.white, size: 22))),
-                    const Spacer(),
-                    if (memory.dateTime != null)
-                      Text(DateFormat('MMM d, y  h:mm a').format(memory.dateTime),
-                          style: const TextStyle(color: Colors.white70, fontSize: 12)),
-                  ],
+            child: SafeArea(child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Row(children: [
+                CupertinoButton(
+                  padding: EdgeInsets.zero,
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: Container(
+                    width: 34, height: 34,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.black.withOpacity(0.5)),
+                    child: const Icon(CupertinoIcons.xmark, color: Colors.white, size: 16)),
                 ),
-              ),
-            )),
-
+                const Spacer(),
+                if (memory.dateTime != null)
+                  Text(DateFormat('MMM d, y').format(memory.dateTime),
+                      style: const TextStyle(color: Colors.white70, fontSize: 13)),
+              ]),
+            ))),
           // Bottom bar
           Positioned(bottom: 0, left: 0, right: 0,
-            child: SafeArea(
-              child: Container(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.bottomCenter, end: Alignment.topCenter,
-                    colors: [Colors.black.withOpacity(0.8), Colors.transparent]),
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Person names if any
-                    if (memory.people.isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 8),
-                        child: Text(
-                          memory.people.map((p) => p.name).join(', '),
-                          style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600),
-                        ),
-                      ),
-                    if (memory.location != null && memory.location!.isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 8),
-                        child: Row(children: [
-                          const Icon(Icons.location_on_rounded, color: Color(0xFF10B981), size: 14),
-                          const SizedBox(width: 4),
-                          Text(memory.location!, style: const TextStyle(color: Color(0xFF10B981), fontSize: 12)),
-                        ]),
-                      ),
-                    // Add details button if no details yet
-                    if (!hasDetails)
-                      GestureDetector(
-                        onTap: onAddDetails,
-                        child: Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.symmetric(vertical: 13),
-                          decoration: BoxDecoration(
-                            gradient: AppTheme.primaryGradient,
-                            borderRadius: BorderRadius.circular(14),
-                            boxShadow: AppTheme.primaryGlow,
-                          ),
-                          child: const Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                            Icon(Icons.person_add_rounded, color: Colors.white, size: 18),
-                            SizedBox(width: 8),
-                            Text('Add Details', style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600)),
-                          ]),
-                        ),
-                      ),
-                  ],
-                ),
+            child: SafeArea(child: Container(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.bottomCenter, end: Alignment.topCenter,
+                  colors: [Colors.black.withOpacity(0.75), Colors.transparent])),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (memory.people.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 6),
+                      child: Text(memory.people.map((p) => p.name).join(', '),
+                          style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600))),
+                  if (memory.location != null && memory.location!.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: Row(children: [
+                        const Icon(CupertinoIcons.location_fill, color: Color(0xFF34C759), size: 13),
+                        const SizedBox(width: 4),
+                        Text(memory.location!, style: const TextStyle(color: Color(0xFF34C759), fontSize: 13)),
+                      ])),
+                  if (!hasDetails)
+                    CupertinoButton.filled(
+                      onPressed: onAddDetails,
+                      borderRadius: BorderRadius.circular(14),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      child: const Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                        Icon(CupertinoIcons.person_badge_plus, size: 18),
+                        SizedBox(width: 8),
+                        Text('Add Details', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                      ]),
+                    ),
+                ],
               ),
-            )),
+            ))),
         ],
       ),
     );
@@ -640,12 +670,6 @@ class _PhotoViewerScreen extends StatelessWidget {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-class _EmptyAction {
-  final String label;
-  final VoidCallback onTap;
-  const _EmptyAction({required this.label, required this.onTap});
-}
 
 class _Reminder {
   final String name, message;
@@ -655,37 +679,6 @@ class _Reminder {
   const _Reminder({required this.name, required this.message, this.avatarPath, required this.color, required this.daysAgo});
 }
 
-class _AnimatedCard extends StatefulWidget {
-  final int index;
-  final Widget child;
-  const _AnimatedCard({required this.index, required this.child});
-  @override
-  State<_AnimatedCard> createState() => _AnimatedCardState();
-}
-
-class _AnimatedCardState extends State<_AnimatedCard> with SingleTickerProviderStateMixin {
-  late AnimationController _ctrl;
-  late Animation<double> _fade;
-  late Animation<Offset> _slide;
-
-  @override
-  void initState() {
-    super.initState();
-    _ctrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 420));
-    _fade  = CurvedAnimation(parent: _ctrl, curve: Curves.easeOut);
-    _slide = Tween<Offset>(begin: const Offset(0, 0.1), end: Offset.zero)
-        .animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeOut));
-    Future.delayed(Duration(milliseconds: widget.index * 50), () { if (mounted) _ctrl.forward(); });
-  }
-
-  @override
-  void dispose() { _ctrl.dispose(); super.dispose(); }
-
-  @override
-  Widget build(BuildContext context) => FadeTransition(
-      opacity: _fade, child: SlideTransition(position: _slide, child: widget.child));
-}
-
 class _ReminderCard extends StatelessWidget {
   final _Reminder reminder;
   const _ReminderCard({required this.reminder});
@@ -693,32 +686,32 @@ class _ReminderCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
-      decoration: AppTheme.glassCard(radius: 16),
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(14),
+      decoration: AppTheme.iosCard(radius: 14),
       child: Row(children: [
         _avatar(),
         const SizedBox(width: 12),
         Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(reminder.name, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppTheme.textPrimary)),
-          const SizedBox(height: 3),
-          Text(reminder.message, style: const TextStyle(fontSize: 12, color: AppTheme.textMuted, height: 1.4)),
+          Text(reminder.name, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: AppTheme.textPrimary)),
+          const SizedBox(height: 2),
+          Text(reminder.message, style: const TextStyle(fontSize: 13, color: AppTheme.textMuted, height: 1.3)),
         ])),
         const SizedBox(width: 8),
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-          decoration: BoxDecoration(color: reminder.color.withOpacity(0.1), borderRadius: BorderRadius.circular(20)),
+          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+          decoration: BoxDecoration(color: reminder.color.withOpacity(0.12), borderRadius: BorderRadius.circular(20)),
           child: Text('${reminder.daysAgo}d',
-              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: reminder.color))),
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: reminder.color))),
       ]),
     );
   }
 
   Widget _avatar() {
     return Container(
-      width: 52, height: 52,
+      width: 48, height: 48,
       decoration: BoxDecoration(shape: BoxShape.circle,
-          border: Border.all(color: reminder.color.withOpacity(0.3), width: 2)),
+          color: reminder.color.withOpacity(0.12)),
       child: ClipOval(
         child: reminder.avatarPath != null && reminder.avatarPath!.isNotEmpty &&
                 !reminder.avatarPath!.startsWith('http')
@@ -729,9 +722,7 @@ class _ReminderCard extends StatelessWidget {
     );
   }
 
-  Widget _fallback() => Container(
-      color: reminder.color.withOpacity(0.1),
-      child: Center(child: Text(
-          reminder.name.isNotEmpty ? reminder.name[0].toUpperCase() : '?',
-          style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: reminder.color))));
+  Widget _fallback() => Center(child: Text(
+      reminder.name.isNotEmpty ? reminder.name[0].toUpperCase() : '?',
+      style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: reminder.color)));
 }
