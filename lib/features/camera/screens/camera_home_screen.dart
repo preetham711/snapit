@@ -6,15 +6,21 @@ import '../../../core/theme/app_theme.dart';
 import '../bloc/camera_bloc.dart';
 import '../services/camera_service.dart';
 import '../widgets/camera_preview_widget.dart';
-import '../widgets/top_bar_widget.dart';
 import 'add_details_screen.dart';
 import '../../gallery/screens/gallery_screen.dart';
 
-// Standard native camera layout:
-//   [Last photo circle]  [Capture button]  [Gallery square]
-// No circles strip — only the single latest photo on the left.
-// Tap left circle → AddDetailsScreen for that photo.
-// Tap right square → Gallery.
+// ─────────────────────────────────────────────────────────────────────────────
+// CameraHomeScreen — Production-quality Google Camera-style UI
+//
+// Controls:
+//   TOP:    Flash toggle | (centered) | Flip camera
+//   BOTTOM: [Last photo thumb] [Capture] [Gallery]
+//   GESTURES:
+//     Single tap on preview → focus
+//     Double tap → flip camera
+//     Pinch → zoom
+//     Swipe UP → open gallery
+// ─────────────────────────────────────────────────────────────────────────────
 
 class CameraHomeScreen extends StatefulWidget {
   const CameraHomeScreen({Key? key}) : super(key: key);
@@ -27,7 +33,6 @@ class _CameraHomeScreenState extends State<CameraHomeScreen>
   late CameraBloc _cameraBloc;
   final CameraService _cameraService = CameraService();
 
-  // Only track the LAST captured image path (standard camera behaviour)
   String? _lastCapturedPath;
 
   late AnimationController _flashCtrl;
@@ -37,7 +42,9 @@ class _CameraHomeScreenState extends State<CameraHomeScreen>
   late Animation<double> _pulseOpacity;
   late AnimationController _captureCtrl;
   late Animation<double> _captureScale;
+
   double _baseZoom = 1.0;
+  double _swipeStartY = 0;
 
   @override
   void initState() {
@@ -45,17 +52,21 @@ class _CameraHomeScreenState extends State<CameraHomeScreen>
     WidgetsBinding.instance.addObserver(this);
     _cameraBloc = CameraBloc()..add(const InitializeCameraEvent());
 
-    _flashCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 120));
+    _flashCtrl = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 120));
     _flashOpacity = Tween<double>(begin: 0.0, end: 1.0)
         .animate(CurvedAnimation(parent: _flashCtrl, curve: Curves.easeOut));
 
-    _pulseCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 1600))..repeat();
+    _pulseCtrl = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 1600))
+      ..repeat();
     _pulseScale = Tween<double>(begin: 1.0, end: 1.5)
         .animate(CurvedAnimation(parent: _pulseCtrl, curve: Curves.easeOut));
     _pulseOpacity = Tween<double>(begin: 0.45, end: 0.0)
         .animate(CurvedAnimation(parent: _pulseCtrl, curve: Curves.easeOut));
 
-    _captureCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 80));
+    _captureCtrl = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 80));
     _captureScale = Tween<double>(begin: 1.0, end: 0.86)
         .animate(CurvedAnimation(parent: _captureCtrl, curve: Curves.easeOut));
   }
@@ -85,15 +96,13 @@ class _CameraHomeScreenState extends State<CameraHomeScreen>
     super.dispose();
   }
 
-  // ── Capture — direct, no BLoC ──────────────────────────────────────────────
+  // ── Capture ────────────────────────────────────────────────────────────────
 
   Future<void> _onCapture() async {
     HapticFeedback.mediumImpact();
     _captureCtrl.forward().then((_) => _captureCtrl.reverse());
-
     final path = await _cameraService.captureImage();
     if (path == null) return;
-
     _triggerFlash();
     if (mounted) setState(() => _lastCapturedPath = path);
   }
@@ -116,8 +125,10 @@ class _CameraHomeScreenState extends State<CameraHomeScreen>
           transitionsBuilder: (_, anim, __, child) => FadeTransition(
             opacity: CurvedAnimation(parent: anim, curve: Curves.easeOut),
             child: SlideTransition(
-              position: Tween<Offset>(begin: const Offset(0, 0.05), end: Offset.zero)
-                  .animate(CurvedAnimation(parent: anim, curve: Curves.easeOutCubic)),
+              position: Tween<Offset>(
+                      begin: const Offset(0, 0.05), end: Offset.zero)
+                  .animate(CurvedAnimation(
+                      parent: anim, curve: Curves.easeOutCubic)),
               child: child,
             ),
           ),
@@ -153,7 +164,9 @@ class _CameraHomeScreenState extends State<CameraHomeScreen>
               curr is CameraReady ||
               curr is CameraError,
           builder: (context, state) {
-            if (state is CameraInitial || state is CameraLoading) return _buildLoading();
+            if (state is CameraInitial || state is CameraLoading) {
+              return _buildLoading();
+            }
             if (state is CameraError) return _buildError(state.message);
             return _buildCamera(state);
           },
@@ -173,25 +186,32 @@ class _CameraHomeScreenState extends State<CameraHomeScreen>
               width: 80, height: 80,
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(20),
-                boxShadow: [BoxShadow(color: AppTheme.primary.withOpacity(0.4), blurRadius: 30, spreadRadius: 2)],
+                boxShadow: [BoxShadow(
+                    color: AppTheme.primary.withOpacity(0.4),
+                    blurRadius: 30, spreadRadius: 2)],
               ),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(20),
                 child: Image.asset('logo/logo.png', fit: BoxFit.cover,
                     errorBuilder: (_, __, ___) => Container(
                       decoration: const BoxDecoration(
-                        gradient: LinearGradient(colors: [Color(0xFF4F46E5), Color(0xFF6366F1)],
-                            begin: Alignment.topLeft, end: Alignment.bottomRight),
+                        gradient: LinearGradient(
+                            colors: [Color(0xFF4F46E5), Color(0xFF6366F1)],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight),
                       ),
-                      child: const Icon(Icons.camera_alt_rounded, color: Colors.white, size: 36),
+                      child: const Icon(Icons.camera_alt_rounded,
+                          color: Colors.white, size: 36),
                     )),
               ),
             ),
             const SizedBox(height: 28),
             const SizedBox(width: 22, height: 22,
-                child: CircularProgressIndicator(color: Colors.white38, strokeWidth: 2)),
+                child: CircularProgressIndicator(
+                    color: Colors.white38, strokeWidth: 2)),
             const SizedBox(height: 14),
-            const Text('Starting camera...', style: TextStyle(color: Colors.white38, fontSize: 13)),
+            const Text('Starting camera...',
+                style: TextStyle(color: Colors.white38, fontSize: 13)),
           ],
         ),
       ),
@@ -210,23 +230,33 @@ class _CameraHomeScreenState extends State<CameraHomeScreen>
               children: [
                 Container(
                   width: 72, height: 72,
-                  decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.white.withOpacity(0.08)),
-                  child: const Icon(Icons.camera_alt_outlined, color: Colors.white38, size: 32),
+                  decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.white.withOpacity(0.08)),
+                  child: const Icon(Icons.camera_alt_outlined,
+                      color: Colors.white38, size: 32),
                 ),
                 const SizedBox(height: 20),
                 const Text('Camera unavailable',
-                    style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)),
+                    style: TextStyle(color: Colors.white, fontSize: 18,
+                        fontWeight: FontWeight.w600)),
                 const SizedBox(height: 8),
                 Text(message, textAlign: TextAlign.center,
-                    style: const TextStyle(color: Colors.white54, fontSize: 13)),
+                    style: const TextStyle(
+                        color: Colors.white54, fontSize: 13)),
                 const SizedBox(height: 28),
                 GestureDetector(
-                  onTap: () => _cameraBloc.add(const InitializeCameraEvent()),
+                  onTap: () =>
+                      _cameraBloc.add(const InitializeCameraEvent()),
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 13),
-                    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(30)),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 28, vertical: 13),
+                    decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(30)),
                     child: const Text('Retry',
-                        style: TextStyle(color: Colors.black, fontSize: 14, fontWeight: FontWeight.w600)),
+                        style: TextStyle(color: Colors.black, fontSize: 14,
+                            fontWeight: FontWeight.w600)),
                   ),
                 ),
               ],
@@ -240,103 +270,204 @@ class _CameraHomeScreenState extends State<CameraHomeScreen>
   Widget _buildCamera(CameraState state) {
     final ready = state is CameraReady ? state : null;
 
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        // Preview — double-tap flip, pinch zoom
-        GestureDetector(
-          onDoubleTap: _onSwitchCamera,
-          onScaleStart: (_) { _baseZoom = ready?.currentZoom ?? 1.0; },
-          onScaleUpdate: (d) {
-            if (ready == null || d.pointerCount < 2) return;
-            _cameraBloc.add(SetZoomEvent(
-                (_baseZoom * d.scale).clamp(ready.minZoom, ready.maxZoom)));
-          },
-          child: CameraPreviewWidget(cameraBloc: _cameraBloc),
-        ),
+    return GestureDetector(
+      // Swipe up → gallery
+      onVerticalDragStart: (d) => _swipeStartY = d.globalPosition.dy,
+      onVerticalDragEnd: (d) {
+        final dy = _swipeStartY - d.globalPosition.dy;
+        if (dy > 80) _openGallery();
+      },
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          // Preview — double-tap flip, pinch zoom, tap focus
+          GestureDetector(
+            onDoubleTap: _onSwitchCamera,
+            onScaleStart: (_) { _baseZoom = ready?.currentZoom ?? 1.0; },
+            onScaleUpdate: (d) {
+              if (ready == null || d.pointerCount < 2) return;
+              _cameraBloc.add(SetZoomEvent(
+                  (_baseZoom * d.scale)
+                      .clamp(ready.minZoom, ready.maxZoom)));
+            },
+            child: CameraPreviewWidget(cameraBloc: _cameraBloc),
+          ),
 
-        // Top gradient
-        Positioned(top: 0, left: 0, right: 0,
-          child: IgnorePointer(child: Container(height: 180,
-            decoration: BoxDecoration(gradient: LinearGradient(
-              begin: Alignment.topCenter, end: Alignment.bottomCenter,
-              colors: [Colors.black.withOpacity(0.65), Colors.transparent]))))),
-
-        // Bottom gradient
-        Positioned(bottom: 0, left: 0, right: 0,
-          child: IgnorePointer(child: Container(height: 260,
-            decoration: BoxDecoration(gradient: LinearGradient(
-              begin: Alignment.bottomCenter, end: Alignment.topCenter,
-              colors: [Colors.black.withOpacity(0.92), Colors.transparent]))))),
-
-        // Shutter flash
-        AnimatedBuilder(
-          animation: _flashOpacity,
-          builder: (_, __) => IgnorePointer(
-            child: Opacity(opacity: _flashOpacity.value, child: const ColoredBox(color: Colors.white)))),
-
-        // Top bar
-        if (ready != null)
+          // Top gradient
           Positioned(top: 0, left: 0, right: 0,
-            child: TopBarWidget(
-              isFlashOn: ready.isFlashOn,
-              isQuickSaveEnabled: ready.isQuickSaveEnabled,
-              onFlashToggle: () => _cameraBloc.add(const ToggleFlashEvent()),
-              onQuickSaveToggle: () => _cameraBloc.add(const ToggleQuickSaveEvent()),
-              onFlipCamera: _onSwitchCamera,
+            child: IgnorePointer(child: Container(height: 160,
+              decoration: BoxDecoration(gradient: LinearGradient(
+                begin: Alignment.topCenter, end: Alignment.bottomCenter,
+                colors: [Colors.black.withOpacity(0.6), Colors.transparent]))))),
+
+          // Bottom gradient
+          Positioned(bottom: 0, left: 0, right: 0,
+            child: IgnorePointer(child: Container(height: 240,
+              decoration: BoxDecoration(gradient: LinearGradient(
+                begin: Alignment.bottomCenter, end: Alignment.topCenter,
+                colors: [Colors.black.withOpacity(0.92), Colors.transparent]))))),
+
+          // Shutter flash
+          AnimatedBuilder(
+            animation: _flashOpacity,
+            builder: (_, __) => IgnorePointer(
+              child: Opacity(opacity: _flashOpacity.value,
+                  child: const ColoredBox(color: Colors.white)))),
+
+          // Top bar: Flash | (spacer) | Flip
+          Positioned(top: 0, left: 0, right: 0,
+            child: SafeArea(
+              bottom: false,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 20, vertical: 12),
+                child: Row(
+                  children: [
+                    // Flash
+                    _CamIconBtn(
+                      onTap: () =>
+                          _cameraBloc.add(const ToggleFlashEvent()),
+                      child: Icon(
+                        ready?.isFlashOn == true
+                            ? Icons.flash_on_rounded
+                            : Icons.flash_off_rounded,
+                        color: ready?.isFlashOn == true
+                            ? Colors.amber
+                            : Colors.white,
+                        size: 22,
+                      ),
+                    ),
+                    const Spacer(),
+                    // Flip
+                    _CamIconBtn(
+                      onTap: _onSwitchCamera,
+                      child: const Icon(Icons.flip_camera_ios_rounded,
+                          color: Colors.white, size: 22),
+                    ),
+                  ],
+                ),
+              ),
             )),
 
-        // Zoom badge
-        if (ready != null && ready.currentZoom > 1.05)
-          Positioned(top: 110, left: 0, right: 0,
-            child: Center(child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-              decoration: BoxDecoration(color: Colors.black.withOpacity(0.55),
-                  borderRadius: BorderRadius.circular(20)),
-              child: Text('${ready.currentZoom.toStringAsFixed(1)}x',
-                  style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600))))),
+          // Zoom badge
+          if (ready != null && ready.currentZoom > 1.05)
+            Positioned(top: 110, left: 0, right: 0,
+              child: Center(child: Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 14, vertical: 6),
+                decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.55),
+                    borderRadius: BorderRadius.circular(20)),
+                child: Text('${ready.currentZoom.toStringAsFixed(1)}×',
+                    style: const TextStyle(color: Colors.white,
+                        fontSize: 14, fontWeight: FontWeight.w600))))),
 
-        // Bottom controls row — standard native camera layout
-        Positioned(bottom: 0, left: 0, right: 0,
-          child: SafeArea(
-            top: false,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(28, 0, 28, 36),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  // LEFT: last captured photo thumbnail (rounded square, like native camera)
-                  _LastPhotoThumb(
-                    imagePath: _lastCapturedPath,
-                    onTap: _lastCapturedPath != null
-                        ? () => _openAddDetails(_lastCapturedPath!)
-                        : _openGallery,
-                  ),
-
-                  // CENTER: capture button
-                  _CaptureButton(
-                    pulseScale: _pulseScale,
-                    pulseOpacity: _pulseOpacity,
-                    captureScale: _captureScale,
-                    captureCtrl: _captureCtrl,
-                    onCapture: _onCapture,
-                  ),
-
-                  // RIGHT: gallery
-                  _GalleryButton(onTap: _openGallery),
-                ],
+          // Swipe-up hint
+          Positioned(bottom: 140, left: 0, right: 0,
+            child: IgnorePointer(
+              child: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.keyboard_arrow_up_rounded,
+                        color: Colors.white.withOpacity(0.4), size: 20),
+                    Text('Swipe up for gallery',
+                        style: TextStyle(
+                            color: Colors.white.withOpacity(0.35),
+                            fontSize: 11)),
+                  ],
+                ),
               ),
-            ),
-          )),
-      ],
+            )),
+
+          // Bottom controls
+          Positioned(bottom: 0, left: 0, right: 0,
+            child: SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(28, 0, 28, 32),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    // Last photo thumb
+                    _LastPhotoThumb(
+                      imagePath: _lastCapturedPath,
+                      onTap: _lastCapturedPath != null
+                          ? () => _openAddDetails(_lastCapturedPath!)
+                          : _openGallery,
+                    ),
+
+                    // Capture
+                    _CaptureButton(
+                      pulseScale: _pulseScale,
+                      pulseOpacity: _pulseOpacity,
+                      captureScale: _captureScale,
+                      captureCtrl: _captureCtrl,
+                      onCapture: _onCapture,
+                    ),
+
+                    // Gallery
+                    _GalleryButton(onTap: _openGallery),
+                  ],
+                ),
+              ),
+            )),
+        ],
+      ),
     );
   }
 }
 
-// ─── Last photo thumbnail (left button) ──────────────────────────────────────
-// Shows the most recently captured photo as a rounded square.
-// Matches native Android/iOS camera behaviour.
+// ─── Camera icon button (top bar) ─────────────────────────────────────────────
+
+class _CamIconBtn extends StatefulWidget {
+  final Widget child;
+  final VoidCallback onTap;
+  const _CamIconBtn({required this.child, required this.onTap});
+
+  @override
+  State<_CamIconBtn> createState() => _CamIconBtnState();
+}
+
+class _CamIconBtnState extends State<_CamIconBtn>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _ctrl;
+  late Animation<double> _scale;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 100));
+    _scale = Tween<double>(begin: 1.0, end: 0.82)
+        .animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeOut));
+  }
+
+  @override
+  void dispose() { _ctrl.dispose(); super.dispose(); }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTapDown: (_) => _ctrl.forward(),
+      onTapUp: (_) { _ctrl.reverse(); widget.onTap(); },
+      onTapCancel: () => _ctrl.reverse(),
+      child: ScaleTransition(
+        scale: _scale,
+        child: Container(
+          width: 44, height: 44,
+          decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: Colors.black.withOpacity(0.4)),
+          child: Center(child: widget.child),
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Last photo thumbnail ─────────────────────────────────────────────────────
 
 class _LastPhotoThumb extends StatefulWidget {
   final String? imagePath;
@@ -355,7 +486,8 @@ class _LastPhotoThumbState extends State<_LastPhotoThumb>
   @override
   void initState() {
     super.initState();
-    _ctrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 100));
+    _ctrl = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 100));
     _scale = Tween<double>(begin: 1.0, end: 0.88)
         .animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeOut));
   }
@@ -388,8 +520,10 @@ class _LastPhotoThumbState extends State<_LastPhotoThumb>
             child: widget.imagePath != null
                 ? Image.file(File(widget.imagePath!), fit: BoxFit.cover,
                     errorBuilder: (_, __, ___) => const Icon(
-                        Icons.photo_library_outlined, color: Colors.white54, size: 24))
-                : const Icon(Icons.photo_library_outlined, color: Colors.white38, size: 24),
+                        Icons.photo_library_outlined,
+                        color: Colors.white54, size: 24))
+                : const Icon(Icons.photo_library_outlined,
+                    color: Colors.white38, size: 24),
           ),
         ),
       ),
@@ -435,12 +569,14 @@ class _CaptureButton extends StatelessWidget {
                   child: Opacity(opacity: pulseOpacity.value,
                       child: Container(width: 84, height: 84,
                           decoration: BoxDecoration(shape: BoxShape.circle,
-                              border: Border.all(color: Colors.white, width: 1.5)))))),
+                              border: Border.all(
+                                  color: Colors.white, width: 1.5)))))),
               Container(width: 76, height: 76,
                   decoration: BoxDecoration(shape: BoxShape.circle,
                       border: Border.all(color: Colors.white, width: 3.5))),
               Container(width: 62, height: 62,
-                  decoration: const BoxDecoration(shape: BoxShape.circle, color: Colors.white)),
+                  decoration: const BoxDecoration(
+                      shape: BoxShape.circle, color: Colors.white)),
             ],
           ),
         ),
@@ -449,7 +585,7 @@ class _CaptureButton extends StatelessWidget {
   }
 }
 
-// ─── Gallery button (right) ───────────────────────────────────────────────────
+// ─── Gallery button ───────────────────────────────────────────────────────────
 
 class _GalleryButton extends StatefulWidget {
   final VoidCallback onTap;
@@ -467,7 +603,8 @@ class _GalleryButtonState extends State<_GalleryButton>
   @override
   void initState() {
     super.initState();
-    _ctrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 100));
+    _ctrl = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 100));
     _scale = Tween<double>(begin: 1.0, end: 0.88)
         .animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeOut));
   }
@@ -488,9 +625,11 @@ class _GalleryButtonState extends State<_GalleryButton>
           decoration: BoxDecoration(
             color: Colors.white.withOpacity(0.12),
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.white.withOpacity(0.3), width: 1.5),
+            border: Border.all(
+                color: Colors.white.withOpacity(0.3), width: 1.5),
           ),
-          child: const Icon(Icons.photo_library_rounded, color: Colors.white, size: 24),
+          child: const Icon(Icons.photo_library_rounded,
+              color: Colors.white, size: 24),
         ),
       ),
     );
